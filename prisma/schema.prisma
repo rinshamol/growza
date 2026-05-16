@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(BUYER)
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  plants    Plant[]
+  orders    Order[]
+  cart      Cart[]
+}
+
+model Plant {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  stock       Int      @default(0)
+  imageUrl    String?
+  category    String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  sellerId    String
+  seller      User     @relation(fields: [sellerId], references: [id])
+  orderItems  OrderItem[]
+  cartItems   Cart[]
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  totalAmount Float
+  status      OrderStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+
+  buyerId     String
+  buyer       User        @relation(fields: [buyerId], references: [id])
+  items       OrderItem[]
+  payment     Payment?
+}
+
+model OrderItem {
+  id       String @id @default(cuid())
+  quantity Int
+  price    Float
+
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id])
+  plantId  String
+  plant    Plant  @relation(fields: [plantId], references: [id])
+}
+
+model Cart {
+  id       String @id @default(cuid())
+  quantity Int    @default(1)
+
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+  plantId  String
+  plant    Plant  @relation(fields: [plantId], references: [id])
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  razorpayId String        @unique
+  amount     Float
+  status     PaymentStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+
+  orderId    String        @unique
+  order      Order         @relation(fields: [orderId], references: [id])
+}
+
+enum Role {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
