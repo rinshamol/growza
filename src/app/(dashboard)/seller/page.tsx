@@ -62,6 +62,18 @@ export default function SellerDashboard() {
       fetchPlants();
     }
   }
+  async function handleDelete(plantId: string) {
+    const confirmed = confirm("Are you sure you want to delete this plant?");
+    if (!confirmed) return;
+
+    const res = await fetch(`/api/plants/${plantId}`, {
+      method: "DELETE",
+    });
+
+    if (res.ok) {
+      setPlants(plants.filter(p => p.id !== plantId));
+    }
+  }
 
   if (loading) return <p className="p-8">Loading...</p>;
 
@@ -224,6 +236,12 @@ export default function SellerDashboard() {
                   <p className="text-xs text-gray-400 mt-1">
                     Stock: {plant.stock}
                   </p>
+                  <button
+                    onClick={() => handleDelete(plant.id)}
+                    className="mt-3 w-full text-red-500 border border-red-300 rounded-lg py-1 text-sm hover:bg-red-50 transition"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))
