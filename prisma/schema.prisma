@@ -26,6 +26,8 @@ model User {
 model Plant {
   id          String   @id @default(cuid())
   name        String
+  nameML         String?   
+  scientificName String?
   description String
   price       Float
   stock       Int      @default(0)
