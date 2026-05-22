@@ -9,6 +9,7 @@ type Plant = {
   name: string;
   nameML: string | null;
   scientificName: string | null;
+  description: string;
   price: number;
   stock: number;
   category: string;
@@ -22,14 +23,11 @@ export default function SellerDashboard() {
   const [plants, setPlants] = useState<Plant[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-    }
-    if (status === "authenticated") {
-      fetchPlants();
-    }
+    if (status === "unauthenticated") router.push("/login");
+    if (status === "authenticated") fetchPlants();
   }, [status]);
 
   async function fetchPlants() {
@@ -42,7 +40,18 @@ export default function SellerDashboard() {
   async function handleAddPlant(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-
+    let imageUrl = "";
+    const imageFile = formData.get("image") as File;
+    if (imageFile && imageFile.size > 0) {
+      const uploadData = new FormData();
+      uploadData.append("file", imageFile);
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: uploadData,
+      });
+      const uploadJson = await uploadRes.json();
+      imageUrl = uploadJson.url;
+    }
     const res = await fetch("/api/plants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -54,6 +63,7 @@ export default function SellerDashboard() {
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
         category: formData.get("category"),
+        imageUrl,
       }),
     });
 
@@ -62,24 +72,59 @@ export default function SellerDashboard() {
       fetchPlants();
     }
   }
+
+  async function handleEditPlant(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingPlant) return;
+    const formData = new FormData(e.currentTarget);
+     let imageUrl = "";
+  const imageFile = formData.get("image") as File;
+  if (imageFile && imageFile.size > 0) {
+    const uploadData = new FormData();
+    uploadData.append("file", imageFile);
+    const uploadRes = await fetch("/api/upload", {
+      method: "POST",
+      body: uploadData,
+    });
+    const uploadJson = await uploadRes.json();
+    imageUrl = uploadJson.url;
+  }
+    const res = await fetch(`/api/plants/${editingPlant.id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: formData.get("name"),
+      nameML: formData.get("nameML"),
+      scientificName: formData.get("scientificName"),
+      description: formData.get("description"),
+      price: Number(formData.get("price")),
+      stock: Number(formData.get("stock")),
+      category: formData.get("category"),
+      imageUrl: imageUrl || editingPlant.imageUrl,
+    }),
+  });
+
+    if (res.ok) {
+      const updated = await res.json();
+      setPlants(plants.map((p) => (p.id === updated.id ? updated : p)));
+      setEditingPlant(null);
+    }
+  }
+
   async function handleDelete(plantId: string) {
     const confirmed = confirm("Are you sure you want to delete this plant?");
     if (!confirmed) return;
 
-    const res = await fetch(`/api/plants/${plantId}`, {
-      method: "DELETE",
-    });
-
-    if (res.ok) {
-      setPlants(plants.filter(p => p.id !== plantId));
-    }
+    const res = await fetch(`/api/plants/${plantId}`, { method: "DELETE" });
+    if (res.ok) setPlants(plants.filter((p) => p.id !== plantId));
   }
 
   if (loading) return <p className="p-8">Loading...</p>;
 
   return (
     <div className="min-h-screen bg-green-50 p-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <img
             src="/applogo.png"
@@ -87,7 +132,10 @@ export default function SellerDashboard() {
             className="h-16 object-contain"
           />
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              setShowForm(!showForm);
+              setEditingPlant(null);
+            }}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
           >
             {showForm ? "Cancel" : "+ Add Plant"}
@@ -106,66 +154,61 @@ export default function SellerDashboard() {
                 name="name"
                 placeholder="Plant name (English)"
                 required
-                className="border rounded-lg px-3 py-2 text-gray-900"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
               />
               <input
                 name="nameML"
                 placeholder="Plant name (Malayalam)"
-                className="border rounded-lg px-3 py-2 text-gray-900"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
               />
               <input
                 name="scientificName"
                 placeholder="Scientific name"
-                className="border rounded-lg px-3 py-2 text-gray-900"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
               />
               <select
                 name="category"
                 required
-                className="border border-gray-900 rounded-lg px-3 py-2 text-gray-400"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                 onChange={(e) =>
                   e.target.classList.replace("text-gray-400", "text-gray-900")
                 }
               >
-                <option value="" disabled selected className="text-gray-400">
+                <option value="" disabled  className="text-gray-400">
                   Select category
                 </option>
-                <option value="Indoor" className="text-gray-900">
-                  Indoor
-                </option>
-                <option value="Outdoor" className="text-gray-900">
-                  Outdoor
-                </option>
-                <option value="Aquatic" className="text-gray-900">
-                  Aquatic
-                </option>
-                <option value="Flowering" className="text-gray-900">
-                  Flowering
-                </option>
-                <option value="Medicinal" className="text-gray-900">
-                  Medicinal
-                </option>
+                <option value="Indoor">Indoor</option>
+                <option value="Outdoor">Outdoor</option>
+                <option value="Aquatic">Aquatic</option>
+                <option value="Flowering">Flowering</option>
+                <option value="Medicinal">Medicinal</option>
               </select>
-
+              <input
+                name="image"
+                type="file"
+                accept="image/*"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900 col-span-2"
+              />
               <input
                 name="price"
                 type="number"
                 placeholder="Price (₹)"
                 required
-                className="border rounded-lg px-3 py-2 text-gray-900"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
               />
               <input
                 name="stock"
                 type="number"
                 placeholder="Stock quantity"
                 required
-                className="border rounded-lg px-3 py-2 text-gray-900"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
               />
             </div>
             <textarea
               name="description"
               placeholder="Description"
               required
-              className="w-full border rounded-lg px-3 py-2 text-gray-900"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
               rows={3}
             />
             <button
@@ -174,6 +217,88 @@ export default function SellerDashboard() {
             >
               Save Plant
             </button>
+          </form>
+        )}
+
+        {/* Edit Plant Form */}
+        {editingPlant && (
+          <form
+            onSubmit={handleEditPlant}
+            className="bg-white p-6 rounded-xl shadow mb-6 space-y-4 border-2 border-green-400"
+          >
+            <h2 className="font-semibold text-gray-700">Edit Plant</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <input
+                name="name"
+                defaultValue={editingPlant.name}
+                required
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+              />
+              <input
+                name="nameML"
+                defaultValue={editingPlant.nameML || ""}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+              />
+              <input
+                name="scientificName"
+                defaultValue={editingPlant.scientificName || ""}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+              />
+              <select
+                name="category"
+                defaultValue={editingPlant.category}
+                required
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+              >
+                <option value="Indoor">Indoor</option>
+                <option value="Outdoor">Outdoor</option>
+                <option value="Aquatic">Aquatic</option>
+                <option value="Flowering">Flowering</option>
+                <option value="Medicinal">Medicinal</option>
+              </select>
+              <input
+                name="price"
+                type="number"
+                defaultValue={editingPlant.price}
+                required
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+              />
+              <input
+                name="image"
+                type="file"
+                accept="image/*"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900 col-span-2"
+              />
+              <input
+                name="stock"
+                type="number"
+                defaultValue={editingPlant.stock}
+                required
+                className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+              />
+            </div>
+            <textarea
+              name="description"
+              defaultValue={editingPlant.description}
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
+              rows={3}
+            />
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+              >
+                Update Plant
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingPlant(null)}
+                className="border border-gray-300 px-6 py-2 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         )}
 
@@ -189,7 +314,6 @@ export default function SellerDashboard() {
                 key={plant.id}
                 className="bg-white rounded-2xl shadow hover:shadow-lg transition overflow-hidden"
               >
-                {/* Image - top half */}
                 <div className="w-full h-48 bg-green-100">
                   {plant.imageUrl ? (
                     <img
@@ -211,8 +335,6 @@ export default function SellerDashboard() {
                     <p className="text-green-400 text-sm mt-2">No image</p>
                   </div>
                 </div>
-
-                {/* Details - bottom half */}
                 <div className="p-4">
                   <h3 className="font-bold text-gray-800 text-lg">
                     {plant.name}
@@ -236,12 +358,20 @@ export default function SellerDashboard() {
                   <p className="text-xs text-gray-400 mt-1">
                     Stock: {plant.stock}
                   </p>
-                  <button
-                    onClick={() => handleDelete(plant.id)}
-                    className="mt-3 w-full text-red-500 border border-red-300 rounded-lg py-1 text-sm hover:bg-red-50 transition"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => setEditingPlant(plant)}
+                      className="flex-1 text-green-600 border border-green-300 rounded-lg py-1 text-sm hover:bg-green-50 transition"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(plant.id)}
+                      className="flex-1 text-red-500 border border-red-300 rounded-lg py-1 text-sm hover:bg-red-50 transition"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
