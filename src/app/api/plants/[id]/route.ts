@@ -14,13 +14,30 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Make sure seller owns this plant
   const plant = await prisma.plant.findFirst({
     where: { id, sellerId: session.user.id },
   });
 
   if (!plant) {
     return NextResponse.json({ error: "Plant not found" }, { status: 404 });
+  }
+
+  // Delete image from Cloudinary if exists
+  if (plant.imageUrl) {
+    try {
+      const cloudinary = (await import("@/lib/cloudinary")).default;
+      // Extract public_id from URL
+      // URL format: https://res.cloudinary.com/cloud/image/upload/v123/growza/filename.jpg
+      const urlParts = plant.imageUrl.split("/");
+      const filenameWithExt = urlParts[urlParts.length - 1];
+      const filename = filenameWithExt.split(".")[0];
+      const publicId = `growza/${filename}`;
+      
+      await cloudinary.uploader.destroy(publicId);
+    } catch (err) {
+      console.log("Cloudinary delete failed:", err);
+      // Continue with plant deletion even if image delete fails
+    }
   }
 
   await prisma.plant.delete({ where: { id } });
@@ -51,17 +68,18 @@ export async function PUT(
   }
 
   const updated = await prisma.plant.update({
-    where: { id },
-    data: {
-      name: body.name,
-      nameML: body.nameML,
-      scientificName: body.scientificName,
-      description: body.description,
-      price: Number(body.price),
-      stock: Number(body.stock),
-      category: body.category,
-    },
-  });
+  where: { id },
+  data: {
+    name: body.name,
+    nameML: body.nameML,
+    scientificName: body.scientificName,
+    description: body.description,
+    price: Number(body.price),
+    stock: Number(body.stock),
+    category: body.category,
+    imageUrl: body.imageUrl, 
+  },
+});
 
   return NextResponse.json(updated);
 }

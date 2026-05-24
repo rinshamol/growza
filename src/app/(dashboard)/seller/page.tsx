@@ -24,6 +24,7 @@ export default function SellerDashboard() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
+  const [uploading, setUploading] = useState(false); // add this
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -39,19 +40,30 @@ export default function SellerDashboard() {
 
   async function handleAddPlant(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setUploading(true);
     const formData = new FormData(e.currentTarget);
+
     let imageUrl = "";
     const imageFile = formData.get("image") as File;
     if (imageFile && imageFile.size > 0) {
+      const compressed = await compressImage(imageFile); // compress first!
+
       const uploadData = new FormData();
-      uploadData.append("file", imageFile);
+      uploadData.append("file", compressed);
       const uploadRes = await fetch("/api/upload", {
         method: "POST",
         body: uploadData,
       });
-      const uploadJson = await uploadRes.json();
-      imageUrl = uploadJson.url;
+      if (uploadRes.ok) {
+        const uploadJson = await uploadRes.json();
+        imageUrl = uploadJson.url;
+      } else {
+        alert("Image upload failed!");
+        setUploading(false);
+        return;
+      }
     }
+
     const res = await fetch("/api/plants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -67,50 +79,103 @@ export default function SellerDashboard() {
       }),
     });
 
+    setUploading(false);
     if (res.ok) {
       setShowForm(false);
       fetchPlants();
+    } else {
+      if (imageUrl) {
+        await fetch("/api/upload/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl }),
+        });
+      }
+      alert("Failed to save plant!");
     }
   }
 
   async function handleEditPlant(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!editingPlant) return;
+    setUploading(true);
     const formData = new FormData(e.currentTarget);
-     let imageUrl = "";
-  const imageFile = formData.get("image") as File;
-  if (imageFile && imageFile.size > 0) {
-    const uploadData = new FormData();
-    uploadData.append("file", imageFile);
-    const uploadRes = await fetch("/api/upload", {
-      method: "POST",
-      body: uploadData,
-    });
-    const uploadJson = await uploadRes.json();
-    imageUrl = uploadJson.url;
-  }
-    const res = await fetch(`/api/plants/${editingPlant.id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: formData.get("name"),
-      nameML: formData.get("nameML"),
-      scientificName: formData.get("scientificName"),
-      description: formData.get("description"),
-      price: Number(formData.get("price")),
-      stock: Number(formData.get("stock")),
-      category: formData.get("category"),
-      imageUrl: imageUrl || editingPlant.imageUrl,
-    }),
-  });
 
+    let imageUrl = editingPlant.imageUrl || "";
+    const imageFile = formData.get("image") as File;
+    if (imageFile && imageFile.size > 0) {
+      const compressed = await compressImage(imageFile); // compress first!
+      const uploadData = new FormData();
+      uploadData.append("file", compressed);
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: uploadData,
+      });
+      if (uploadRes.ok) {
+        const uploadJson = await uploadRes.json();
+        imageUrl = uploadJson.url;
+      } else {
+        alert("Image upload failed!");
+        setUploading(false);
+
+        return;
+      }
+    }
+
+    const res = await fetch(`/api/plants/${editingPlant.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: formData.get("name"),
+        nameML: formData.get("nameML"),
+        scientificName: formData.get("scientificName"),
+        description: formData.get("description"),
+        price: Number(formData.get("price")),
+        stock: Number(formData.get("stock")),
+        category: formData.get("category"),
+        imageUrl,
+      }),
+    });
+
+    setUploading(false);
     if (res.ok) {
       const updated = await res.json();
       setPlants(plants.map((p) => (p.id === updated.id ? updated : p)));
       setEditingPlant(null);
+    } else {
+      if (imageUrl) {
+        await fetch("/api/upload/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl }),
+        });
+      }
+      alert("Failed to update plant!");
     }
   }
-
+  async function compressImage(file: File): Promise<File> {
+    return new Promise((resolve) => {
+      const canvas = document.createElement("canvas");
+      const img = new Image();
+      img.onload = () => {
+        // Max width 800px
+        const maxWidth = 800;
+        const ratio = Math.min(maxWidth / img.width, 1);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => {
+            resolve(new File([blob!], file.name, { type: "image/jpeg" }));
+          },
+          "image/jpeg",
+          0.7,
+        ); // 70% quality
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  }
   async function handleDelete(plantId: string) {
     const confirmed = confirm("Are you sure you want to delete this plant?");
     if (!confirmed) return;
@@ -174,7 +239,7 @@ export default function SellerDashboard() {
                   e.target.classList.replace("text-gray-400", "text-gray-900")
                 }
               >
-                <option value="" disabled  className="text-gray-400">
+                <option value="" disabled className="text-gray-400">
                   Select category
                 </option>
                 <option value="Indoor">Indoor</option>
@@ -213,9 +278,10 @@ export default function SellerDashboard() {
             />
             <button
               type="submit"
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+              disabled={uploading}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
             >
-              Save Plant
+              {uploading ? "Uploading..." : "Save Plant"}
             </button>
           </form>
         )}
@@ -287,9 +353,10 @@ export default function SellerDashboard() {
             <div className="flex gap-3">
               <button
                 type="submit"
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+                disabled={uploading}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
-                Update Plant
+                {uploading ? "Uploading..." : "Update Plant"}
               </button>
               <button
                 type="button"
