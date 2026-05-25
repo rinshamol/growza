@@ -17,7 +17,6 @@ const plantSchema = z.object({
 // GET — fetch seller's plants
 export async function GET() {
   const session = await auth();
-  console.log("Session in all plants:", session?.user?.id);
 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

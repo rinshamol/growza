@@ -38,22 +38,20 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   const session = await auth();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  const plants = await prisma.plant.findMany({
-    where: {
-      isAvailable: true,
-      stock: { gt: 0 },
-      NOT: {
-        sellerId: session?.user?.id ?? ""
+  const cartItems = await prisma.cart.findMany({
+    where: { userId: session.user.id },
+    include: {
+      plant: {
+        include: {
+          seller: { select: { name: true } }
+        }
       }
     },
-    orderBy: { createdAt: "desc" },
-    include: {
-      seller: {
-        select: { name: true, address: true }
-      }
-    }
   });
 
-  return NextResponse.json(plants);
+  return NextResponse.json(cartItems);
 }
